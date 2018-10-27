@@ -50,6 +50,13 @@ fn run() -> Result<(), String> {
     }
     updates.sort_unstable_by_key(|(c, _)| &c.name);
 
+    if updates.len() > 1 {
+        println!("\nThe following updates will be performed:");
+        for (_crate, latest_version) in &updates {
+            println!("    {} from {} to {}", _crate.name, _crate.version, latest_version);
+        }
+    }
+
     for (_crate, latest_version) in &updates {
         println!(
             "\nUpdating {} from {} to {}",
