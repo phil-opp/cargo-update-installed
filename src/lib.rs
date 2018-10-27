@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{stderr, Write};
 use std::process::{Command, ExitStatus};
 
 extern crate tempdir;
 extern crate toml;
 
-pub fn installed_crates() -> Result<HashMap<String, Crate>, String> {
+pub fn installed_crates() -> Result<BTreeMap<String, Crate>, String> {
     let mut cargo_list_installed = Command::new("cargo");
     cargo_list_installed.arg("install");
     cargo_list_installed.arg("--list");
@@ -15,7 +15,7 @@ pub fn installed_crates() -> Result<HashMap<String, Crate>, String> {
     let installed =
         String::from_utf8(installed_output.stdout).map_err(|e| format!("UTF-8 Error: {}", e))?;
 
-    let mut crates: HashMap<String, Crate> = HashMap::new();
+    let mut crates: BTreeMap<String, Crate> = BTreeMap::new();
     for line in installed.lines() {
         let _crate = Crate::parse_list_output(line).map_err(|e| format!("Error: {:?}", e))?;
         if let Some(_crate) = _crate {
