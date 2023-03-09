@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::{stderr, Write};
 use std::process::{Command, ExitStatus};
 
-extern crate tempdir;
+extern crate tempfile;
 extern crate toml;
 
 pub fn installed_crates() -> Result<BTreeMap<String, Crate>, String> {
@@ -38,7 +38,7 @@ pub fn get_latest_versions(
     required_crates: &HashMap<String, Crate>,
 ) -> Result<HashMap<String, String>, String> {
     use std::fs;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     fn dependency_string(required_crates: &HashMap<String, Crate>) -> String {
         let mut string = String::new();
@@ -53,7 +53,7 @@ pub fn get_latest_versions(
     }
 
     fn create_dummy_crate(required_crates: &HashMap<String, Crate>) -> Result<TempDir, String> {
-        let tmpdir = TempDir::new("cargo-update-installed")
+        let tmpdir = TempDir::new()
             .map_err(|e| format!("I/O Error while creating temporary directory: {}", e))?;
         let cargo_toml_path = tmpdir.path().join("Cargo.toml");
         let src_dir_path = tmpdir.path().join("src");
@@ -165,12 +165,12 @@ pub struct Crate {
 pub enum CrateKind {
     CratesIo,
     /*
-    Git {
-        url: String,
-        branch: Option<String>,
-    },
-    Local,
-*/
+        Git {
+            url: String,
+            branch: Option<String>,
+        },
+        Local,
+    */
 }
 
 impl Crate {
