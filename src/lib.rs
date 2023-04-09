@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::{stderr, Write};
 use std::process::{Command, ExitStatus};
 
@@ -34,121 +34,10 @@ pub fn installed_crates() -> Result<BTreeMap<String, Crate>, String> {
     Ok(crates)
 }
 
-pub fn get_latest_versions(
-    required_crates: &HashMap<String, Crate>,
-) -> Result<HashMap<String, String>, String> {
-    use std::fs;
-    use tempfile::TempDir;
-
-    fn dependency_string(required_crates: &HashMap<String, Crate>) -> String {
-        let mut string = String::new();
-        for c in required_crates.values() {
-            match c.kind {
-                CrateKind::CratesIo => {
-                    string.push_str(&format!(r#"{} = "{}"{}"#, c.name, c.version, '\n'));
-                }
-            }
-        }
-        string
-    }
-
-    fn create_dummy_crate(required_crates: &HashMap<String, Crate>) -> Result<TempDir, String> {
-        let tmpdir = TempDir::new()
-            .map_err(|e| format!("I/O Error while creating temporary directory: {}", e))?;
-        let cargo_toml_path = tmpdir.path().join("Cargo.toml");
-        let src_dir_path = tmpdir.path().join("src");
-        let lib_rs_path = src_dir_path.join("lib.rs");
-
-        let cargo_toml_content = format!(
-            r#"[package]
-name = "cargo-update-installed-dummy"
-version = "0.1.0"
-authors = [""]
-
-[dependencies]
-{}
-"#,
-            dependency_string(required_crates)
-        );
-
-        fs::create_dir(src_dir_path)
-            .map_err(|e| format!("I/O Error while creating src dir in temp dir: {}", e))?;
-        fs::write(cargo_toml_path, cargo_toml_content)
-            .map_err(|e| format!("I/O Error while writing dummy Cargo.toml: {}", e))?;
-        fs::write(lib_rs_path, "")
-            .map_err(|e| format!("I/O Error while writing dummy lib.rs: {}", e))?;
-        Ok(tmpdir)
-    }
-
-    fn run_cargo_update(tmpdir: &TempDir) -> Result<ExitStatus, String> {
-        let mut cargo_update_command = Command::new("cargo");
-        cargo_update_command.arg("update");
-        cargo_update_command.arg("--manifest-path");
-        cargo_update_command.arg(tmpdir.path().join("Cargo.toml"));
-        cargo_update_command
-            .status()
-            .map_err(|e| format!("I/O Error while running `cargo update`: {}", e))
-    }
-
-    fn parse_cargo_lock(
-        tmpdir: &TempDir,
-        required_crates: &HashMap<String, Crate>,
-    ) -> Result<HashMap<String, String>, String> {
-        use std::fs;
-        use toml::Value;
-
-        let cargo_lock_path = tmpdir.path().join("Cargo.lock");
-        let cargo_lock = fs::read_to_string(cargo_lock_path)
-            .map_err(|e| format!("I/O Error while reading dummy Cargo.lock: {}", e))?;
-
-        let root_value: Value = cargo_lock
-            .parse()
-            .map_err(|e| format!("Error while parsing dummy Cargo.lock: {}", e))?;
-        let packages = root_value
-            .get("package")
-            .and_then(|v| v.as_array())
-            .ok_or("Error: package array not found in dummy Cargo.lock")?;
-
-        let mut latest_versions = HashMap::new();
-        for crate_name in required_crates.keys() {
-            let package = packages
-                .iter()
-                .find(|p| p.get("name").and_then(|v| v.as_str()) == Some(crate_name))
-                .ok_or(format!(
-                    "Error: package {} not found in dummy Cargo.lock",
-                    crate_name
-                ))?;
-            let version = package
-                .get("version")
-                .and_then(|v| v.as_str())
-                .ok_or(format!(
-                    "Error: package {} has no version number in dummy Cargo.lock",
-                    crate_name
-                ))?;
-            if latest_versions
-                .insert(crate_name.clone(), String::from(version))
-                .is_some()
-            {
-                writeln!(stderr(), "Warning: package {} is present multiple times in dummy Cargo.lock. Choosing version {}.", crate_name, version);
-            }
-        }
-        Ok(latest_versions)
-    }
-
-    let tmpdir = create_dummy_crate(required_crates)?;
-    if !run_cargo_update(&tmpdir)?.success() {
-        return Err("Error: `cargo update` failed".into());
-    }
-    parse_cargo_lock(&tmpdir, required_crates)
-}
-
-pub fn install_update(name: &str, version: &str) -> Result<ExitStatus, String> {
+pub fn install_update(name: &str) -> Result<ExitStatus, String> {
     let mut cargo_install_command = Command::new("cargo");
     cargo_install_command.arg("install");
-    cargo_install_command.arg("--force");
     cargo_install_command.arg(name);
-    cargo_install_command.arg("--version");
-    cargo_install_command.arg(version);
     cargo_install_command
         .status()
         .map_err(|e| format!("I/O Error while running `cargo install`: {}", e))
@@ -196,7 +85,7 @@ impl Crate {
             let version = version.trim_end_matches(":");
             Ok(Some(Crate {
                 name: name.into(),
-                version: version.into(),
+                version: version.parse().map_err(|_| ParseListOutputError)?,
                 kind: CrateKind::CratesIo,
             }))
         } else {
